@@ -24,7 +24,7 @@
   const fileInput = document.getElementById('fileInput');
   const fileInfo = document.getElementById('fileInfo');
 
-  const sheetConfigSection = document.getElementById('sheetConfigSection');
+  const configBottomPanel = document.getElementById('configBottomPanel');
   const sheetSelectGroup = document.getElementById('sheetSelectGroup');
   const sheetSelect = document.getElementById('sheetSelect');
   const titleColSelect = document.getElementById('titleColSelect');
@@ -53,7 +53,6 @@
   // Filter count spans
   const countAll = document.getElementById('countAll');
   const countAvailable = document.getElementById('countAvailable');
-  const countUnavailable = document.getElementById('countUnavailable');
   const countNotAtBranch = document.getElementById('countNotAtBranch');
   const countNotFound = document.getElementById('countNotFound');
   const countError = document.getElementById('countError');
@@ -253,7 +252,10 @@
         currentSheetRows = SheetUtils.sheetTo2DArray(worksheet);
 
         setupColumnConfig();
-        sheetConfigSection.style.display = 'flex';
+        if (configBottomPanel) {
+          configBottomPanel.style.display = 'flex';
+          configBottomPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
         if (previewDrawer) previewDrawer.style.display = 'block';
       } catch (err) {
         alert('Error parsing spreadsheet file: ' + err.message);
@@ -491,12 +493,11 @@
     });
 
     totalResultsCount.textContent = total;
-    countAll.textContent = total;
-    countAvailable.textContent = availCount;
-    countUnavailable.textContent = unavailCount;
-    countNotAtBranch.textContent = notAtBranchCount;
-    countNotFound.textContent = notFoundCount;
-    countError.textContent = errorCount;
+    if (countAll) countAll.textContent = total;
+    if (countAvailable) countAvailable.textContent = availCount;
+    if (countNotAtBranch) countNotAtBranch.textContent = notAtBranchCount;
+    if (countNotFound) countNotFound.textContent = notFoundCount;
+    if (countError) countError.textContent = errorCount;
   }
 
   // --- Table Rendering & Filtering ---

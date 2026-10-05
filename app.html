@@ -18,58 +18,53 @@
       </div>
     </header>
 
-    <!-- Upload & Configuration Panel (Horizontal & Compact) -->
-    <div class="card setup-panel">
-      <div class="setup-grid">
-        <!-- 1. Drop Zone / File Picker -->
-        <div class="setup-col file-col">
-          <label class="panel-label">1. Spreadsheet File</label>
-          <div id="dropZone" class="drop-zone-compact">
-            <span class="drop-icon">📄</span>
-            <div class="drop-text-group">
-              <span class="drop-title">Drop .xlsx or .csv or <strong>Browse</strong></span>
-              <span id="fileInfo" class="file-info-compact" style="display: none;"></span>
-            </div>
-            <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display: none;" />
-          </div>
+    <!-- 1. Big Spreadsheet File Upload Zone -->
+    <div class="card file-upload-card">
+      <div id="dropZone" class="drop-zone-large">
+        <div class="drop-zone-icon">📄</div>
+        <div class="drop-zone-main-text">
+          Drag & drop your Excel (<strong>.xlsx</strong>) or <strong>.csv</strong> file here
         </div>
+        <div class="drop-zone-sub-text">or <span class="browse-link">Browse files</span> from your computer</div>
+        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display: none;" />
+        <div id="fileInfo" class="file-info-badge" style="display: none;"></div>
+      </div>
+    </div>
 
-        <!-- 2. Target Library Branch Field (Selectable) -->
-        <div class="setup-col branch-col">
-          <label class="panel-label" for="targetBranchSelect">2. Target Library Branch</label>
+    <!-- 2. Bottom Configuration Panel (Target Library + Columns + Start Button), revealed after file selected -->
+    <div class="card config-panel" id="configBottomPanel" style="display: none;">
+      <div class="config-grid">
+        <!-- Target Library Branch Select -->
+        <div class="config-col branch-col">
+          <label class="panel-label" for="targetBranchSelect">Target Library Branch</label>
           <div class="branch-input-wrapper">
             <select id="targetBranchSelect">
               <option value="Little Italy">Little Italy</option>
-              <!-- Populated dynamically from https://data.cityofchicago.org/resource/x8fc-8rcq.json -->
+              <!-- Populated dynamically from City of Chicago data API -->
             </select>
           </div>
         </div>
 
-        <!-- 3. Sheet & Column Mapping -->
-        <div class="setup-col mapping-col" id="sheetConfigSection">
-          <label class="panel-label">3. Columns</label>
-          <div class="col-selectors-row">
-            <div class="form-group-compact" id="sheetSelectGroup" style="display: none;">
-              <label for="sheetSelect">Sheet</label>
-              <select id="sheetSelect"></select>
-            </div>
-            <div class="form-group-compact">
-              <label for="titleColSelect">Title</label>
-              <select id="titleColSelect" disabled>
-                <option value="">(Upload file first)</option>
-              </select>
-            </div>
-            <div class="form-group-compact">
-              <label for="authorColSelect">Author</label>
-              <select id="authorColSelect" disabled>
-                <option value="">(Upload file first)</option>
-              </select>
-            </div>
-          </div>
+        <!-- Sheet Selector (if multiple sheets) -->
+        <div class="config-col sheet-col" id="sheetSelectGroup" style="display: none;">
+          <label class="panel-label" for="sheetSelect">Worksheet</label>
+          <select id="sheetSelect"></select>
         </div>
 
-        <!-- 4. Action Buttons -->
-        <div class="setup-col action-col">
+        <!-- Book Title Column -->
+        <div class="config-col title-col">
+          <label class="panel-label" for="titleColSelect">Book Title Column</label>
+          <select id="titleColSelect"></select>
+        </div>
+
+        <!-- Author Column -->
+        <div class="config-col author-col">
+          <label class="panel-label" for="authorColSelect">Author Column</label>
+          <select id="authorColSelect"></select>
+        </div>
+
+        <!-- Actions -->
+        <div class="config-col action-col">
           <label class="panel-label">&nbsp;</label>
           <div class="action-buttons-row">
             <button type="button" id="btnStart" class="btn btn-primary" disabled>Start Search</button>
@@ -79,9 +74,9 @@
         </div>
       </div>
 
-      <!-- Compact 5-row preview expandable drawer -->
+      <!-- Expandable Preview Drawer (First 5 Rows) -->
       <details id="previewDrawer" class="preview-drawer" style="display: none;">
-        <summary>View Data Preview (First 5 Rows)</summary>
+        <summary>View Spreadsheet Preview (First 5 Rows)</summary>
         <div class="preview-table-container">
           <table class="preview-table" id="previewTable">
             <thead></thead>
@@ -116,8 +111,7 @@
         <!-- Filter tabs -->
         <div class="filter-tabs" id="filterTabs">
           <button class="tab-btn active" data-filter="ALL">All (<span id="countAll">0</span>)</button>
-          <button class="tab-btn" data-filter="AVAILABLE">Available (<span id="countAvailable">0</span>)</button>
-          <button class="tab-btn" data-filter="AT BRANCH, NOT AVAILABLE">At Branch, Not Available (<span id="countUnavailable">0</span>)</button>
+          <button class="tab-btn" data-filter="AVAILABLE">Available / Owned (<span id="countAvailable">0</span>)</button>
           <button class="tab-btn" data-filter="NOT AT BRANCH">Not At Branch (<span id="countNotAtBranch">0</span>)</button>
           <button class="tab-btn" data-filter="NOT FOUND">Not Found (<span id="countNotFound">0</span>)</button>
           <button class="tab-btn" data-filter="ERROR">Errors (<span id="countError">0</span>)</button>
