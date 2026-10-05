@@ -60,34 +60,38 @@
   // Initialize
   document.addEventListener('DOMContentLoaded', () => {
     loadSavedSettings();
-    loadBranchesFromCityData();
+    loadBranchesFromBibliocommons();
     setupEventListeners();
   });
 
-  // Fetch official library list from City of Chicago data portal
-  async function loadBranchesFromCityData() {
-    const CITY_API_URL = 'https://data.cityofchicago.org/resource/x8fc-8rcq.json';
+  // Fetch official library list from Bibliocommons API with Little Italy as default
+  async function loadBranchesFromBibliocommons() {
+    const LOCATIONS_API_URL = 'https://gateway.bibliocommons.com/v2/libraries/chipublib/locations?limit=200&locale=en-US';
 
     let branchNames = [];
 
     try {
-      const response = await fetch(CITY_API_URL);
+      const response = await fetch(LOCATIONS_API_URL);
       if (response.ok) {
         const data = await response.json();
-        if (Array.isArray(data)) {
-          branchNames = data
-            .map(item => item.branch_ || item.branch || item.name)
-            .filter(Boolean)
-            .map(name => name.trim());
-        }
+        const locationsMap = (data && data.entities && data.entities.locations) || {};
+        branchNames = Object.values(locationsMap)
+          .map(loc => loc.name)
+          .filter(Boolean)
+          .map(name => name.trim());
       }
     } catch (e) {
-      console.warn('Could not fetch City of Chicago library data API, falling back to local branch list:', e);
+      console.warn('Could not fetch Bibliocommons locations API, falling back to local branch list:', e);
     }
 
-    // Merge with built-in CPL branches as reliable fallback
+    // Combine with local branch list as fallback
     const combinedSet = new Set([...branchNames, ...LibraryUtils.ALL_CPL_BRANCHES]);
     const sortedBranches = Array.from(combinedSet).sort((a, b) => a.localeCompare(b));
+
+    // Default to Little Italy if targetBranch is empty or not in list
+    if (!targetBranch) {
+      targetBranch = 'Little Italy';
+    }
 
     if (targetBranchSelect) {
       targetBranchSelect.innerHTML = '';
@@ -100,8 +104,14 @@
         }
         targetBranchSelect.appendChild(opt);
       });
-      // Ensure targetBranch matches the select value
-      targetBranch = targetBranchSelect.value;
+
+      // If saved targetBranch wasn't found in list, pick Little Italy or first option
+      if (!sortedBranches.some(b => b.toLowerCase() === targetBranch.toLowerCase())) {
+        const littleItalyMatch = sortedBranches.find(b => b.toLowerCase() === 'little italy');
+        targetBranch = littleItalyMatch || sortedBranches[0] || 'Little Italy';
+        targetBranchSelect.value = targetBranch;
+      }
+
       updateStartButtonState();
     }
   }
