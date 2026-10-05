@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chicago Public Library Availability Checker</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <h1>
+        📚 Chicago Public Library Availability Checker
+      </h1>
+      <div class="badge-privacy">
+        🔒 Requests go directly from your browser to CPL. Spreadsheet data never leaves your computer.
+      </div>
+    </header>
+
+    <!-- Upload & Configuration Panel (Horizontal & Compact) -->
+    <div class="card setup-panel">
+      <div class="setup-grid">
+        <!-- 1. Drop Zone / File Picker -->
+        <div class="setup-col file-col">
+          <label class="panel-label">1. Spreadsheet File</label>
+          <div id="dropZone" class="drop-zone-compact">
+            <span class="drop-icon">📄</span>
+            <div class="drop-text-group">
+              <span class="drop-title">Drop .xlsx or .csv or <strong>Browse</strong></span>
+              <span id="fileInfo" class="file-info-compact" style="display: none;"></span>
+            </div>
+            <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display: none;" />
+          </div>
+        </div>
+
+        <!-- 2. Target Library Branch Field (Selectable) -->
+        <div class="setup-col branch-col">
+          <label class="panel-label" for="targetBranchSelect">2. Target Library Branch</label>
+          <div class="branch-input-wrapper">
+            <select id="targetBranchSelect">
+              <option value="Little Italy">Little Italy</option>
+              <!-- Populated dynamically from https://data.cityofchicago.org/resource/x8fc-8rcq.json -->
+            </select>
+          </div>
+        </div>
+
+        <!-- 3. Sheet & Column Mapping -->
+        <div class="setup-col mapping-col" id="sheetConfigSection">
+          <label class="panel-label">3. Columns</label>
+          <div class="col-selectors-row">
+            <div class="form-group-compact" id="sheetSelectGroup" style="display: none;">
+              <label for="sheetSelect">Sheet</label>
+              <select id="sheetSelect"></select>
+            </div>
+            <div class="form-group-compact">
+              <label for="titleColSelect">Title</label>
+              <select id="titleColSelect" disabled>
+                <option value="">(Upload file first)</option>
+              </select>
+            </div>
+            <div class="form-group-compact">
+              <label for="authorColSelect">Author</label>
+              <select id="authorColSelect" disabled>
+                <option value="">(Upload file first)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Action Buttons -->
+        <div class="setup-col action-col">
+          <label class="panel-label">&nbsp;</label>
+          <div class="action-buttons-row">
+            <button type="button" id="btnStart" class="btn btn-primary" disabled>Start Search</button>
+            <button type="button" id="btnCancel" class="btn btn-danger" disabled>Cancel</button>
+            <button type="button" id="btnClearCache" class="btn btn-sm" title="Clear cached responses">Clear Cache</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compact 5-row preview expandable drawer -->
+      <details id="previewDrawer" class="preview-drawer" style="display: none;">
+        <summary>View Data Preview (First 5 Rows)</summary>
+        <div class="preview-table-container">
+          <table class="preview-table" id="previewTable">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </details>
+
+      <!-- Integrated Progress Bar -->
+      <div id="progressContainer" class="progress-container" style="display: none;">
+        <div class="progress-status">
+          <span id="progressText">Ready</span>
+          <span id="progressPercent">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div id="progressBarFill" class="progress-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="card" id="resultsCard" style="display: none;">
+      <div class="results-header">
+        <div class="results-toolbar">
+          <h2>Results (<span id="totalResultsCount">0</span>)</h2>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <input type="text" id="tableSearchInput" class="search-box" placeholder="Filter by title, author, branch..." />
+            <button type="button" id="btnDownloadCsv" class="btn btn-primary">Download Results (CSV)</button>
+          </div>
+        </div>
+
+        <!-- Filter tabs -->
+        <div class="filter-tabs" id="filterTabs">
+          <button class="tab-btn active" data-filter="ALL">All (<span id="countAll">0</span>)</button>
+          <button class="tab-btn" data-filter="AVAILABLE">Available (<span id="countAvailable">0</span>)</button>
+          <button class="tab-btn" data-filter="AT BRANCH, NOT AVAILABLE">At Branch, Not Available (<span id="countUnavailable">0</span>)</button>
+          <button class="tab-btn" data-filter="NOT AT BRANCH">Not At Branch (<span id="countNotAtBranch">0</span>)</button>
+          <button class="tab-btn" data-filter="NOT FOUND">Not Found (<span id="countNotFound">0</span>)</button>
+          <button class="tab-btn" data-filter="ERROR">Errors (<span id="countError">0</span>)</button>
+        </div>
+      </div>
+
+      <!-- Results Table -->
+      <div class="results-table-container">
+        <table class="results-table" id="resultsTable">
+          <thead>
+            <tr>
+              <th data-sort="title">Title ▲▼</th>
+              <th data-sort="author">Author ▲▼</th>
+              <th data-sort="status">Status ▲▼</th>
+              <th data-sort="matchedEdition">Matched Editions ▲▼</th>
+              <th data-sort="matchedBranch">Branch ▲▼</th>
+              <th data-sort="copyStatus">Copy Status ▲▼</th>
+              <th data-sort="dueDate">Due Date ▲▼</th>
+              <th data-sort="systemAvailable">System Copies (Avail/Total/Holds) ▲▼</th>
+            </tr>
+          </thead>
+          <tbody id="resultsTbody">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- External libraries and modules -->
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="sheet.js"></script>
+  <script src="library.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
