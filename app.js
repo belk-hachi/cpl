@@ -29,9 +29,11 @@
     api = Api.createApi({
       fetchFn: url => fetch(url, { headers: { Accept: 'application/json' } }),
       storage: { load: () => store.get('cache'), save: o => store.set('cache', o) },
-      delayMs: 500
+      delayMs: 1000
     });
     await api.init();
+    const pause = [500, 1000, 2000, 3000].includes(Number(state.settings.pauseMs)) ? Number(state.settings.pauseMs) : 1000;
+    $('pauseSel').value = String(pause); api.setDelay(pause);
     await loadBranches();
     bind();
   }
@@ -61,6 +63,7 @@
     $('sheetSel').addEventListener('change', () => loadSheet($('sheetSel').value));
     $('titleCol').addEventListener('change', refreshBooks);
     $('authorCol').addEventListener('change', refreshBooks);
+    $('pauseSel').addEventListener('change', () => { const ms = Number($('pauseSel').value); api.setDelay(ms); state.settings.pauseMs = ms; store.set('settings', state.settings); });
     $('branchSel').addEventListener('change', () => { state.settings.branchCode = $('branchSel').value; store.set('settings', state.settings); });
     $('btnStart').addEventListener('click', () => run(state.books.map((b, i) => i)));
     $('btnCancel').addEventListener('click', () => { state.cancel = true; $('btnCancel').disabled = true; });
@@ -182,7 +185,11 @@
     for (const r of rows) {
       const x = r.result;
       const copy = h('td', {}, [x.copyDetail || '', x.overdue ? h('span', { class: 'flag', text: 'Overdue' }) : null,
-        x.note ? h('div', { class: 'note', text: x.note }) : null]);
+        x.note ? h('div', { class: 'note', text: x.note }) : null,
+        (x.status === 'CHECK MANUALLY' || x.status === 'ERROR')
+          ? h('div', { class: 'note' }, [h('a', { href: Lib.catalogSearchUrl(r.title, r.author), target: '_blank', rel: 'noopener', text: 'Search on the CPL site ↗' })])
+          : null]);
+      for (const a of copy.querySelectorAll('a')) a.addEventListener('click', ev => ev.stopPropagation());
       const tr = h('tr', { class: 'row s-' + x.status.replace(/\s+/g, '-'), tabindex: '0' }, [h('td', { text: r.rowIndex }), h('td', { text: r.title }), h('td', { text: r.author }), statusCell(x), copy]);
       const toggle = () => { state.open.has(r.i) ? state.open.delete(r.i) : state.open.add(r.i); renderTable(); };
       tr.addEventListener('click', toggle);

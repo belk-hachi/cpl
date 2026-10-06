@@ -178,6 +178,14 @@ test('http error becomes CHECK MANUALLY with the code; network error becomes ERR
   assert.strictEqual((await Engine.checkBook(mk('http'), { title: 'X', author: 'Y' }, LI, {})).status, 'CHECK MANUALLY');
   assert.strictEqual((await Engine.checkBook(mk('error'), { title: 'X', author: 'Y' }, LI, {})).status, 'ERROR');
 });
+test('CPL search link uses cleaned title and author, only on rows to check by hand', () => {
+  const u = Lib.catalogSearchUrl('Living a Jewish Life, Revised and Updated: Traditions', 'Diamant, Anita');
+  assert.ok(u.startsWith('https://chipublib.bibliocommons.com/v2/search?'));
+  assert.ok(!/Revised/i.test(decodeURIComponent(u)));
+  assert.ok(/Diamant/.test(decodeURIComponent(u)));
+  const csv = Exp.toCsv([{ rowIndex: 2, title: 'A', author: 'B', result: { status: 'CHECK MANUALLY' } }, { rowIndex: 3, title: 'A', author: 'B', result: { status: 'IN STOCK' } }], 'X').split('\r\n');
+  assert.ok(csv[0].endsWith('CPL search link')); assert.ok(/bibliocommons\.com\/v2\/search/.test(csv[1])); assert.ok(!/bibliocommons/.test(csv[2]));
+});
 test('CSV has Branch column, no Action column, 4-digit year', () => {
   const csv = Exp.toCsv([{ rowIndex: 2, title: 'T, with comma', author: 'A', result: { status: 'IN STOCK', copyDetail: 'Available', year: '2026', ownedEditions: [1], systemAvailable: 1, systemTotal: 2 } }], 'Little Italy');
   assert.ok(csv.includes('Branch') && !csv.includes('Action')); assert.ok(csv.includes('"T, with comma"')); assert.ok(csv.includes('Little Italy'));

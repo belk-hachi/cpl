@@ -14,8 +14,8 @@
   }
   // kind: 'fatal' (stop the whole run) | 'http' (4xx, not retried) | 'error' (network/5xx after retries)
 
-  const CACHE_TTL_MS = 60 * 60 * 1000;
-  const CACHE_MAX = 300;
+  const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+  const CACHE_MAX = 2000;
   const MAX_RETRIES = 3;
 
   function createApi(o) {
@@ -23,7 +23,7 @@
     const sleep = o.sleep || (ms => new Promise(r => setTimeout(r, ms)));
     const now = o.now || (() => Date.now());
     const storage = o.storage || null; // { load(): Promise<object>, save(obj): Promise }
-    let delayMs = o.delayMs == null ? 500 : o.delayMs;
+    let delayMs = o.delayMs == null ? 1000 : o.delayMs;
     let cache = {};
     let lastReq = 0;
     const stats = { requests: 0, cacheHits: 0 };

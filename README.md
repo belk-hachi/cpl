@@ -19,7 +19,7 @@ Double-click `update.bat`, then press Reload on the extension card in `chrome://
 
 How it works: one search filtered to the branch (`f_STATUS=<code>`) lists every edition the branch holds; titles are checked; then the real copy status is read per owned edition. Books and paperbacks only. The branch filter is not complete (it can miss checked-out, in-transit and on-order copies), so when it finds nothing the first 2 pages of editions are also checked directly (up to 12 availability calls per book).
 
-Limits and politeness: one request at a time, 500 ms pause, retries only on 429/5xx/network errors, a 403 stops the run. Cache: 1 hour, 300 entries.
+Limits and politeness: one request at a time, a pause between requests you choose (default 1 s), retries only on 429/5xx/network errors, a 403 stops the run. Cache: 24 hours, 2000 entries.
 
 ## Tests
 `node tests/run-tests.js` (offline; fixtures in `tests/fixtures`).

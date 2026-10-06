@@ -122,6 +122,11 @@
   const availabilityUrl = id => `${BASE}/bibs/${encodeURIComponent(id)}/availability?locale=en-US`;
   const locationsUrl = () => `${BASE}/locations?limit=200&locale=en-US`;
   const recordUrl = id => CATALOG + id;
+  /** Link to the CPL website's own search, for rows a person has to check by hand. */
+  function catalogSearchUrl(title, author) {
+    const q = [titleForQuery(title), authorForQuery(author)].filter(Boolean).join(' ');
+    return 'https://chipublib.bibliocommons.com/v2/search?searchType=smart&query=' + encodeURIComponent(q);
+  }
 
   // ---------- parsing ----------
   function yearOf(d) {
@@ -251,7 +256,7 @@
   return {
     BASE, IN_STOCK_STATUSES, ON_ORDER_STATUSES, STATUSES,
     classifyStatus, cleanTitle, normalizeTitle, titleRelation, authorForQuery, titleForQuery,
-    buildQuery, searchUrl, availabilityUrl, locationsUrl, recordUrl,
+    buildQuery, searchUrl, availabilityUrl, locationsUrl, recordUrl, catalogSearchUrl,
     yearOf, parseSearch, parseAvailability, parseLocations, isOverdue, decide, copyLabel
   };
 });

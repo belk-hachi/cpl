@@ -28,6 +28,12 @@
         <label>Author column <select id="authorCol"></select></label>
         <label id="sheetWrap" hidden>Sheet <select id="sheetSel"></select></label>
         <label>Branch <select id="branchSel"></select></label>
+        <label>Pause between requests <select id="pauseSel">
+          <option value="500">0.5 s (fast)</option>
+          <option value="1000">1 s (recommended)</option>
+          <option value="2000">2 s (gentle)</option>
+          <option value="3000">3 s (slowest)</option>
+        </select></label>
       </div>
       <details class="preview"><summary>Preview first 5 rows</summary>
         <div class="scroll"><table id="previewTable"></table></div>
