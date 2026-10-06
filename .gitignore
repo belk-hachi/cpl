@@ -8,3 +8,8 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+claude_to_delete/
+probe.html
+probe.js
+probe2.html
+probe2.js

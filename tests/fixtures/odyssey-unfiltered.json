@@ -1,0 +1,59 @@
+{
+ "catalogSearch": {
+  "pagination": {
+   "count": 87,
+   "pages": 4,
+   "page": 1
+  },
+  "results": [
+   {
+    "representative": "S3",
+    "manifestations": [
+     "S3"
+    ]
+   },
+   {
+    "representative": "S4",
+    "manifestations": [
+     "S4"
+    ]
+   }
+  ]
+ },
+ "entities": {
+  "bibs": {
+   "S3": {
+    "briefInfo": {
+     "title": "The Odyssey",
+     "format": "PAPERBACK",
+     "authors": [
+      "Austen, Jane"
+     ],
+     "publicationDate": "2018"
+    },
+    "availability": {
+     "availableCopies": 0,
+     "totalCopies": 59,
+     "heldCopies": 0,
+     "onOrderCopies": 35
+    }
+   },
+   "S4": {
+    "briefInfo": {
+     "title": "The Odyssey",
+     "format": "BK",
+     "authors": [
+      "Austen, Jane"
+     ],
+     "publicationDate": "2004"
+    },
+    "availability": {
+     "availableCopies": 2,
+     "totalCopies": 3,
+     "heldCopies": 0,
+     "onOrderCopies": 0
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,37 @@
+{
+ "catalogSearch": {
+  "pagination": {
+   "count": 1,
+   "pages": 1,
+   "page": 1
+  },
+  "results": [
+   {
+    "representative": "S5",
+    "manifestations": [
+     "S5"
+    ]
+   }
+  ]
+ },
+ "entities": {
+  "bibs": {
+   "S5": {
+    "briefInfo": {
+     "title": "The Odyssey",
+     "format": "PAPERBACK",
+     "authors": [
+      "Austen, Jane"
+     ],
+     "publicationDate": "2000"
+    },
+    "availability": {
+     "availableCopies": 7,
+     "totalCopies": 22,
+     "heldCopies": 0,
+     "onOrderCopies": 0
+    }
+   }
+  }
+ }
+}

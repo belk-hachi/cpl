@@ -1,0 +1,81 @@
+{
+ "catalogSearch": {
+  "pagination": {
+   "count": 3,
+   "pages": 1,
+   "page": 1
+  },
+  "results": [
+   {
+    "representative": "S126C582127",
+    "manifestations": [
+     "S126C582127"
+    ]
+   },
+   {
+    "representative": "S126C2026729",
+    "manifestations": [
+     "S126C2026729"
+    ]
+   },
+   {
+    "representative": "S126C2593898",
+    "manifestations": [
+     "S126C2593898"
+    ]
+   }
+  ]
+ },
+ "entities": {
+  "bibs": {
+   "S126C582127": {
+    "briefInfo": {
+     "title": "Pride and Prejudice",
+     "format": "PAPERBACK",
+     "authors": [
+      "Austen, Jane"
+     ],
+     "publicationDate": "1995"
+    },
+    "availability": {
+     "availableCopies": 6,
+     "totalCopies": 11,
+     "heldCopies": 0,
+     "onOrderCopies": 0
+    }
+   },
+   "S126C2026729": {
+    "briefInfo": {
+     "title": "Pride",
+     "format": "BK",
+     "authors": [
+      "Austen, Jane"
+     ],
+     "publicationDate": "2013"
+    },
+    "availability": {
+     "availableCopies": 30,
+     "totalCopies": 32,
+     "heldCopies": 0,
+     "onOrderCopies": 0
+    }
+   },
+   "S126C2593898": {
+    "briefInfo": {
+     "title": "Elizabeth of East Hampton",
+     "format": "PAPERBACK",
+     "authors": [
+      "Austen, Jane"
+     ],
+     "publicationDate": "2015"
+    },
+    "availability": {
+     "availableCopies": 3,
+     "totalCopies": 6,
+     "heldCopies": 0,
+     "onOrderCopies": 0
+    }
+   }
+  }
+ }
+}

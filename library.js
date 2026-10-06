@@ -1,527 +1,257 @@
 /**
- * library.js — Library API search, availability, branch matching, and availability evaluation logic.
- * Pure logic module with NO DOM dependencies.
+ * library.js - pure logic, no network and no DOM. Works in the browser and in Node tests.
  */
-
-(function (exports) {
+(function (root, factory) {
+  const m = factory();
+  if (typeof module === 'object' && module.exports) module.exports = m; else root.Lib = m;
+})(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const CPL_LIB_ID = 'chipublib';
-  const BASE_URL = 'https://gateway.bibliocommons.com/v2/libraries/' + CPL_LIB_ID;
+  const BASE = 'https://gateway.bibliocommons.com/v2/libraries/chipublib';
+  const CATALOG = 'https://chipublib.bibliocommons.com/v2/record/';
+  const FORMAT_CLAUSE = 'formatcode:(BK OR PAPERBACK )';
 
-  // Complete list of known CPL branches
-  const ALL_CPL_BRANCHES = [
-    'Albany Park', 'Altgeld', 'Archer Heights', 'Austin', 'Austin-Irving', 'Avalon',
-    'Back of the Yards', 'Beverly', 'Bezazian', 'Blackstone', 'Brainerd', 'Brighton Park',
-    'Bucktown-Wicker Park', 'Budlong Woods', 'Canaryville', 'Chicago Bee', 'Chicago Lawn',
-    'Chinatown', 'Clearing', 'Coleman', 'Daley Richard J.-Bridgeport', 'Daley Richard M.-W Humboldt',
-    'Douglass', 'Dunning', 'Edgebrook', 'Edgewater', 'Gage Park', 'Garfield Ridge',
-    'Greater Grand Crossing', 'Hall', 'Harold Washington Library Center', 'Hegewisch',
-    'Humboldt Park', 'Independence', 'Jefferson Park', 'Jeffery Manor', 'Kelly', 'King',
-    'Legler Regional', 'Lincoln Belmont', 'Lincoln Park', 'Little Italy', 'Little Village',
-    'Logan Square', 'Lozano', 'Manning', 'Mayfair', 'McKinley Park', 'Merlo',
-    'Mount Greenwood', 'Near North', 'North Austin', 'North Pulaski', 'Northtown',
-    'Obama Presidential Center', 'Oriole Park', 'Portage-Cragin', 'Pullman', 'Roden',
-    'Rogers Park', 'Scottsdale', 'Sherman Park', 'South Chicago', 'South Shore',
-    'Sulzer Regional', 'Thurgood Marshall', 'Toman', 'Uptown', 'Vodak-East Side',
-    'Walker', 'West Belmont', 'West Loop', 'West Pullman', 'West Town',
-    'Whitney M. Young Jr.', 'Woodson Regional', 'Wrightwood-Ashburn'
-  ];
+  // libraryStatus values that mean the branch owns/holds a copy (so no need to order).
+  const IN_STOCK_STATUSES = ['Available', 'Checked Out', 'Hold Shelf', 'In Transit', 'Transferred for Hold', 'In-Library Use Only', 'Not Yet Shelved'];
+  // libraryStatus values that mean a copy has been ordered but has not arrived.
+  const ON_ORDER_STATUSES = ['On Order'];
 
-  /**
-   * Normalizes a branch name for comparison (trim + lowercase).
-   */
-  function normalizeBranch(name) {
-    return (name || '').toString().trim().toLowerCase();
+  const low = s => String(s == null ? '' : s).trim().toLowerCase();
+  const IN_STOCK_LOW = IN_STOCK_STATUSES.map(low);
+  const ON_ORDER_LOW = ON_ORDER_STATUSES.map(low);
+
+  /** 'inStock' | 'onOrder' | 'unknown' (unknown is counted as in stock by decide()). */
+  function classifyStatus(status) {
+    const s = low(status);
+    if (ON_ORDER_LOW.includes(s)) return 'onOrder';
+    if (IN_STOCK_LOW.includes(s)) return 'inStock';
+    return 'unknown';
   }
 
-  /**
-   * Checks if an item's branch matches a user's target branch selection.
-   * Prefer exact match. Fall back to substring match ONLY if the target branch is not
-   * an exact match for another distinct branch in the system.
-   *
-   * @param {string} itemBranch Name of branch on library item
-   * @param {string} targetBranch User-selected target branch
-   * @param {Array<string>} [knownBranches] List of known system branches
-   * @returns {boolean}
-   */
-  function isBranchMatch(itemBranch, targetBranch, knownBranches = ALL_CPL_BRANCHES) {
-    const itemNorm = normalizeBranch(itemBranch);
-    const targetNorm = normalizeBranch(targetBranch);
-
-    if (!itemNorm || !targetNorm) return false;
-
-    // 1. Exact match
-    if (itemNorm === targetNorm) {
-      return true;
-    }
-
-    // 2. Substring match handling
-    if (itemNorm.includes(targetNorm)) {
-      // Check if target is an exact match for a known branch (e.g. target "Austin" vs item "North Austin")
-      const isTargetExactKnownBranch = knownBranches.some(b => normalizeBranch(b) === targetNorm);
-      if (isTargetExactKnownBranch) {
-        // If target is an exact standalone branch name (like "Austin"), it should NOT match "North Austin"
-        return false;
-      }
-      return true;
-    }
-
-    // Reverse substring match (target was longer e.g. user selected "Harold Washington Library Center" and item says "Harold Washington")
-    if (targetNorm.includes(itemNorm) && itemNorm.length >= 5) {
-      return true;
-    }
-
-    return false;
+  // ---------- titles ----------
+  /** Drop edition noise from a spreadsheet title: second title after ';', (parentheses), subtitle after ':', "Revised and Updated", "25th Anniversary Edition". */
+  function cleanTitle(t) {
+    let s = String(t == null ? '' : t).split(';')[0];
+    s = s.replace(/\([^)]*\)/g, ' ');
+    s = s.split(':')[0];
+    s = s.replace(/[,\s]+(?:revised(?: and updated)?|updated|expanded|\d+(?:st|nd|rd|th)[- ]anniversary|anniversary)\b.*$/i, '');
+    return s.replace(/\s+/g, ' ').trim();
   }
 
-  /**
-   * Formats an author name for Bibliocommons search.
-   * If "Philip Roth", converts to "Roth, Philip".
-   * If "Roth, Philip", keeps as is.
-   * @param {string} author
-   * @returns {{ formatted: string, isReformatted: boolean }}
-   */
-  function formatAuthorForSearch(author) {
-    const clean = (author || '').trim();
-    if (!clean) return { formatted: '', isReformatted: false };
-
-    if (clean.includes(',')) {
-      return { formatted: clean, isReformatted: false };
-    }
-
-    const parts = clean.split(/\s+/);
-    if (parts.length >= 2) {
-      const lastName = parts[parts.length - 1];
-      const firstName = parts.slice(0, parts.length - 1).join(' ');
-      return { formatted: `${lastName}, ${firstName}`, isReformatted: true };
-    }
-
-    return { formatted: clean, isReformatted: false };
+  function normalizeTitle(t) {
+    let s = cleanTitle(t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    s = s.replace(/&/g, ' and ');
+    s = s.split(':')[0];
+    s = s.replace(/,\s*or,\s.*$/, '');
+    s = s.replace(/\([^)]*\)/g, ' ');
+    s = s.replace(/['’`]/g, '');
+    s = s.replace(/[^a-z0-9]+/g, ' ').trim();
+    s = s.replace(/^(the|a|an)\s+/, '');
+    return s;
   }
 
-  /**
-   * Cleans title string for search query syntax safety.
-   * Strips quotes, parentheses, colons, brackets.
-   * @param {string} title
-   * @returns {{ titleClean: string, mainTitle: string, hasSubtitle: boolean }}
-   */
-  function cleanTitleForSearch(title) {
-    const raw = (title || '').trim();
-    if (!raw) return { titleClean: '', mainTitle: '', hasSubtitle: false };
+  const loose = t => t.split(' ').filter(w => !['the', 'a', 'an'].includes(w)).join(' ');
 
-    let mainTitle = raw;
-    let hasSubtitle = false;
-
-    if (raw.includes(':')) {
-      hasSubtitle = true;
-      mainTitle = raw.split(':')[0].trim();
+  function editDistance(x, y) {
+    const d = Array.from({ length: x.length + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= y.length; j++) d[0][j] = j;
+    for (let i = 1; i <= x.length; i++) for (let j = 1; j <= y.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
     }
-
-    const sanitize = (str) => str.replace(/["()\[\]:?!*]/g, ' ').replace(/\s+/g, ' ').trim();
-
-    return {
-      titleClean: sanitize(raw),
-      mainTitle: sanitize(mainTitle),
-      hasSubtitle
-    };
+    return d[x.length][y.length];
+  }
+  /** Same words, allowing a spelling variant in long words (Ilyich / Ilych). */
+  function sameWords(a, b) {
+    const x = loose(a).split(' '), y = loose(b).split(' ');
+    if (x.length !== y.length || x.length < 2) return false;
+    return x.every((w, i) => w === y[i] || (w.length >= 5 && y[i].length >= 5 && editDistance(w, y[i]) <= 2));
   }
 
-  /**
-   * Builds search query parameters for Bibliocommons API.
-   * @param {string} title
-   * @param {string} author
-   * @returns {Array<{ query: string, note: string }>} List of queries to try in fallback order
-   */
-  function buildSearchQueries(title, author) {
-    const queries = [];
-    const authorObj = formatAuthorForSearch(author);
-    const titleObj = cleanTitleForSearch(title);
-
-    const formatConstraint = 'formatcode:(BK OR PAPERBACK )';
-
-    // 1. Preferred query: reformatted author + clean title
-    if (authorObj.formatted && titleObj.titleClean) {
-      queries.push({
-        query: `(contributor:(${authorObj.formatted}) AND title:(${titleObj.titleClean}) ) ${formatConstraint}`,
-        note: 'Author + Title'
-      });
+  /** 'exact' | 'near' | 'none'. near = one title contains the other as whole words (shorter has 2+ words). */
+  function titleRelation(sheetTitle, editionTitle, author) {
+    const a = normalizeTitle(sheetTitle);
+    let b = normalizeTitle(editionTitle);
+    // "Joseph Conrad's Heart of Darkness" is the same book as "Heart of Darkness".
+    const words = String(author || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['\u2019`]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+    if (words.length) {
+      const forms = [words.join(' ') + 's ', ...words.map(w => w + 's '), ...(words.length > 1 ? [words.slice().reverse().join(' ') + 's '] : [])];
+      const hit = forms.find(f => b.startsWith(f) && b.length > f.length);
+      if (hit) b = b.slice(hit.length);
     }
-
-    // 2. If author was reformatted, try raw author + title
-    if (authorObj.isReformatted && author.trim() && titleObj.titleClean) {
-      queries.push({
-        query: `(contributor:(${author.trim()}) AND title:(${titleObj.titleClean}) ) ${formatConstraint}`,
-        note: 'Raw Author + Title'
-      });
-    }
-
-    // 3. If title had a subtitle, try main title (before colon) + author
-    if (titleObj.hasSubtitle && titleObj.mainTitle && authorObj.formatted) {
-      queries.push({
-        query: `(contributor:(${authorObj.formatted}) AND title:(${titleObj.mainTitle}) ) ${formatConstraint}`,
-        note: 'Author + Main Title (before colon)'
-      });
-    }
-
-    // 4. Fallback: Title only (ONLY if no author was provided in spreadsheet)
-    if (!author || !author.trim()) {
-      if (titleObj.titleClean) {
-        queries.push({
-          query: `title:(${titleObj.titleClean}) ${formatConstraint}`,
-          note: 'Matched by title only'
-        });
-      }
-
-      if (titleObj.hasSubtitle && titleObj.mainTitle) {
-        queries.push({
-          query: `title:(${titleObj.mainTitle}) ${formatConstraint}`,
-          note: 'Matched by main title only'
-        });
-      }
-    }
-
-    return queries;
+    if (!a || !b) return 'none';
+    if (a === b || loose(a) === loose(b) || sameWords(a, b)) return 'exact';
+    const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+    if (short.split(' ').length >= 2 && (' ' + long + ' ').includes(' ' + short + ' ')) return 'near';
+    return 'none';
   }
 
-  /**
-   * Parses the search endpoint JSON response.
-   * Returns list of edition records.
-   * @param {Object} data JSON response from /bibs/search
-   * @param {number} [maxEditions=10] Max number of editions to return
-   * @returns {Array<Object>} List of bib editions
-   */
-  function parseSearchResponse(data, maxEditions = 10) {
-    if (!data || !data.catalogSearch || !Array.isArray(data.catalogSearch.results)) {
-      return [];
-    }
+  // ---------- queries ----------
+  function authorForQuery(a) {
+    let s = String(a == null ? '' : a).trim();
+    if (!s) return '';
+    s = s.split(/;|&|\/|\s+and\s+/i)[0];
+    s = s.replace(/[()"“”:]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!s) return '';
+    if (s.includes(',')) return s.replace(/\s*,\s*/, ', ');
+    const p = s.split(' ');
+    if (p.length === 1) return s;
+    if (/^(jr|sr|ii|iii|iv)\.?$/i.test(p[p.length - 1])) p.pop();
+    if (p.length === 1) return p[0];
+    const last = p.pop();
+    return last + ', ' + p.join(' ');
+  }
 
-    const bibsMap = (data.entities && data.entities.bibs) || {};
-    const results = [];
+  function titleForQuery(t) {
+    return cleanTitle(t).replace(/&/g, ' and ').replace(/["\u201c\u201d]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
 
-    for (const item of data.catalogSearch.results) {
-      const id = item.representative || item.id;
-      if (!id) continue;
+  function buildQuery(book, titleOnly) {
+    const title = titleForQuery(book.title);
+    const author = authorForQuery(book.author);
+    if (!author || titleOnly) return `(title:(${title}) ) ${FORMAT_CLAUSE}`;
+    return `(contributor:(${author}) AND title:(${title}) ) ${FORMAT_CLAUSE}`;
+  }
 
-      const bib = bibsMap[id] || {};
-      const brief = bib.briefInfo || {};
+  function searchUrl(query, opts) {
+    const o = opts || {};
+    let u = `${BASE}/bibs/search?query=${encodeURIComponent(query)}&searchType=bl&locale=en-US`;
+    if (o.branchCode) u += `&f_STATUS=${encodeURIComponent(o.branchCode)}`;
+    if (o.page && o.page > 1) u += `&page=${o.page}`;
+    return u;
+  }
+  const availabilityUrl = id => `${BASE}/bibs/${encodeURIComponent(id)}/availability?locale=en-US`;
+  const locationsUrl = () => `${BASE}/locations?limit=200&locale=en-US`;
+  const recordUrl = id => CATALOG + id;
 
-      const title = brief.title || 'Unknown Title';
-      const format = brief.format || 'BK';
-      const authors = Array.isArray(brief.authors) ? brief.authors.join(', ') : (brief.authors || '');
-      const pubYear = brief.publicationDate || brief.publicationYear || '';
-      const availSummary = bib.availability || {};
+  // ---------- parsing ----------
+  function yearOf(d) {
+    const m = String(d == null ? '' : d).match(/(1[4-9]\d\d|20\d\d)/);
+    return m ? m[1] : '';
+  }
 
-      results.push({
+  function parseSearch(json) {
+    const cs = (json && json.catalogSearch) || {};
+    const pg = cs.pagination || {};
+    const bibs = (json && json.entities && json.entities.bibs) || {};
+    const seen = new Set();
+    const editions = [];
+    for (const r of cs.results || []) {
+      const id = r.representative || (r.manifestations && r.manifestations[0]);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const b = bibs[id] || {};
+      const bi = b.briefInfo || {};
+      const av = b.availability || {};
+      editions.push({
         id,
-        title,
-        format,
-        authors,
-        pubYear,
-        availableCopies: availSummary.availableCopies || 0,
-        totalCopies: availSummary.totalCopies || 0,
-        heldCopies: availSummary.heldCopies || 0,
-        onOrderCopies: availSummary.onOrderCopies || 0
-      });
-
-      if (results.length >= maxEditions) break;
-    }
-
-    return results;
-  }
-
-  /**
-   * Parses availability endpoint response.
-   * Extracts summary and bib items list.
-   * @param {Object} data JSON response from /bibs/<ID>/availability
-   * @param {string} bibId ID of edition
-   * @returns {{ summary: Object, items: Array<Object> }}
-   */
-  function parseAvailabilityResponse(data, bibId) {
-    const summary = (data && data.entities && data.entities.availabilities && data.entities.availabilities[bibId]) || {
-      availableCopies: 0,
-      totalCopies: 0,
-      heldCopies: 0,
-      onOrderCopies: 0
-    };
-
-    const bibItemsObj = (data && data.entities && data.entities.bibItems) || {};
-    const items = [];
-
-    for (const key of Object.keys(bibItemsObj)) {
-      const item = bibItemsObj[key];
-      if (!item) continue;
-
-      const branchName = item.branchName || (item.branch && item.branch.name) || '';
-      const avail = item.availability || {};
-
-      items.push({
-        itemId: item.id || key,
-        branchName: branchName.trim(),
-        libraryStatus: avail.libraryStatus || 'Unknown',
-        statusType: avail.statusType || 'UNAVAILABLE',
-        dueDate: item.dueDate || avail.dueDate || null,
-        callNumber: item.callNumber || '',
-        collection: item.collection || ''
+        title: bi.title || '',
+        format: bi.format || '',
+        year: yearOf(bi.publicationDate),
+        authors: bi.authors || [],
+        onOrderCopies: Number(av.onOrderCopies) || 0,
+        availableCopies: Number(av.availableCopies) || 0,
+        totalCopies: Number(av.totalCopies) || 0,
+        heldCopies: Number(av.heldCopies) || 0
       });
     }
+    return { count: Number(pg.count) || editions.length, pages: Number(pg.pages) || 1, page: Number(pg.page) || 1, editions };
+  }
 
-    return { summary, items };
+  /** Copies of one bib at one branch (matched by branch code). */
+  function parseAvailability(json, branchCode) {
+    const items = Object.values((json && json.entities && json.entities.bibItems) || {});
+    const out = [];
+    for (const it of items) {
+      if (!it || !it.branch || String(it.branch.code) !== String(branchCode)) continue;
+      const av = it.availability || {};
+      out.push({
+        status: av.libraryStatus || '',
+        statusType: av.statusType || '',
+        due: it.dueDate || av.dueDate || '',
+        callNumber: it.callNumber || '',
+        branchName: it.branchName || ''
+      });
+    }
+    return out;
+  }
+
+  /** Branch list from /locations: entities.locations[id] = { id, name, ... }; the id is the branch code (Little Italy = 62). */
+  function parseLocations(json) {
+    const ents = (json && json.entities && json.entities.locations) || {};
+    const out = [];
+    for (const [key, v] of Object.entries(ents)) {
+      if (!v || typeof v.name !== 'string' || v.isHidden) continue;
+      out.push({ code: String(v.id != null ? v.id : key), name: v.name });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // ---------- decision ----------
+  function isOverdue(due, today) {
+    const m = String(due || '').match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1] < today;
+    const t = Date.parse(due);
+    return !isNaN(t) && new Date(t).toISOString().slice(0, 10) < today;
+  }
+
+  const RANK = { 'available': 0, 'hold shelf': 1, 'transferred for hold': 2, 'in transit': 3, 'checked out': 4 };
+  function copyLabel(c) {
+    const s = low(c.status);
+    if (s === 'checked out') return 'Checked out' + (c.due ? ', due ' + String(c.due).slice(0, 10) : '');
+    return c.status || 'Unknown status';
+  }
+  function bestCopy(copies) {
+    return copies.slice().sort((a, b) => {
+      const ra = RANK[low(a.status)] ?? 5, rb = RANK[low(b.status)] ?? 5;
+      if (ra !== rb) return ra - rb;
+      return String(a.due || '9999').localeCompare(String(b.due || '9999'));
+    })[0];
   }
 
   /**
-   * Evaluates availability of a book across matched editions and target branches.
-   * CRITICAL RULE: A copy counts as AVAILABLE at a branch ONLY if statusType === "AVAILABLE".
-   *
-   * @param {Object} book Input book record ({ title, author })
-   * @param {Array<Object>} editions Matched bib editions (from search)
-   * @param {Map<string, { summary: Object, items: Array<Object> }>} availabilityMap Map of edition id -> availability object
-   * @param {Array<string>} targetBranches List of user selected branch names
-   * @param {string} matchNote Query note (e.g. 'Matched by title only')
-   * @returns {Object} Complete evaluation result object
+   * in: { inStock:[copy], onOrder:[copy], notFound, partial, near:[title], error }
+   * copy: { editionId, title, format, year, status, due }
+   * out: { status, copyDetail, due, overdue, best }
    */
-  function evaluateBookAvailability(book, editions, availabilityMap, targetBranches, matchNote = '') {
-    if (!editions || editions.length === 0) {
-      return {
-        title: book.title,
-        author: book.author,
-        status: 'NOT FOUND',
-        matchedEdition: null,
-        matchedBranch: '-',
-        copyStatus: 'No catalog results',
-        dueDate: '-',
-        systemAvailable: 0,
-        systemTotal: 0,
-        systemHolds: 0,
-        matchNote: matchNote || 'No search results'
-      };
-    }
-
-    let bestAvailableMatch = null;
-    let bestUnavailableMatch = null;
-
-    // Use primary edition for system-wide stats if available
-    const primaryEdition = editions[0];
-    const primaryAvail = availabilityMap.get(primaryEdition.id);
-    const primarySummary = (primaryAvail && primaryAvail.summary) || primaryEdition;
-
-    const systemAvailable = primarySummary.availableCopies || 0;
-    const systemTotal = primarySummary.totalCopies || 0;
-    const systemHolds = primarySummary.heldCopies || 0;
-
-    for (const edition of editions) {
-      const availData = availabilityMap.get(edition.id);
-      if (!availData || !availData.items) continue;
-
-      for (const item of availData.items) {
-        // Check if item's branch matches any selected target branch
-        const matchedTargetBranch = targetBranches.find(tb => isBranchMatch(item.branchName, tb));
-        if (!matchedTargetBranch) continue;
-
-        // Ordering requirement: If library has the book (Available or Checked Out),
-        // it means the library already owns/has the copy, so categorize as AVAILABLE to know not to reorder.
-        const isPhysicallyOwned = (item.statusType === 'AVAILABLE') || 
-                                 (item.libraryStatus && item.libraryStatus.toLowerCase().includes('checked out')) ||
-                                 (item.statusType === 'UNAVAILABLE' && item.libraryStatus !== 'On Order');
-
-        if (isPhysicallyOwned && !bestAvailableMatch) {
-          bestAvailableMatch = {
-            edition,
-            item,
-            targetBranch: matchedTargetBranch
-          };
-          break; // Found matching copy for this edition
-        }
-
-        if (!bestUnavailableMatch) {
-          bestUnavailableMatch = {
-            edition,
-            item,
-            targetBranch: matchedTargetBranch
-          };
+  function decide(r, today) {
+    if (r.error) return { status: 'ERROR', copyDetail: r.error, due: '', overdue: false };
+    if (r.inStock && r.inStock.length) {
+      const best = bestCopy(r.inStock);
+      for (const c of r.inStock) {
+        if (classifyStatus(c.status) === 'unknown' && !warned.has(c.status)) {
+          warned.add(c.status);
+          console.warn('[cpl] unknown copy status counted as in stock:', c.status);
         }
       }
-
-      if (bestAvailableMatch) break; // Found copy overall
-    }
-
-    // Build detailed list of all matched editions with branch-specific status
-    const allEditionsList = editions.map(ed => {
-      const aData = availabilityMap.get(ed.id);
-      const aSummary = (aData && aData.summary) || ed;
-      const items = (aData && aData.items) || [];
-
-      // Find items at target branches for this specific edition
-      const branchItems = items.filter(item => targetBranches.some(tb => isBranchMatch(item.branchName, tb)));
-      let branchStatus = 'Not at branch';
-      let branchItemDetails = null;
-
-      for (const bItem of branchItems) {
-        const isAvail = (bItem.statusType === 'AVAILABLE');
-        const isCheckedOut = bItem.libraryStatus && bItem.libraryStatus.toLowerCase().includes('checked out');
-        const isPhysicallyOwned = isAvail || isCheckedOut || (bItem.statusType === 'UNAVAILABLE' && bItem.libraryStatus !== 'On Order');
-
-        if (isPhysicallyOwned) {
-          const due = bItem.dueDate ? ` (Due: ${bItem.dueDate})` : '';
-          branchStatus = (bItem.libraryStatus || 'Available') + (bItem.dueDate ? due : '');
-          branchItemDetails = bItem;
-          break;
-        } else if (!branchItemDetails) {
-          branchStatus = bItem.libraryStatus || 'Unavailable';
-          branchItemDetails = bItem;
-        }
-      }
-
+      const n = r.inStock.length;
+      const isCheckedOut = low(best.status) === 'checked out';
       return {
-        id: ed.id,
-        title: ed.title,
-        format: ed.format,
-        year: ed.pubYear,
-        availableCopies: aSummary.availableCopies || 0,
-        totalCopies: aSummary.totalCopies || 0,
-        branchStatus, // Specific status at target branch for this edition!
-        branchItem: branchItemDetails,
-        hasCopyAtBranch: branchItems.length > 0
-      };
-    });
-
-    if (bestAvailableMatch) {
-      const { edition, item } = bestAvailableMatch;
-      const formattedDueDate = item.dueDate ? ` (Due: ${item.dueDate})` : '';
-      return {
-        title: book.title,
-        author: book.author,
-        status: 'AVAILABLE',
-        matchedEdition: {
-          id: edition.id,
-          title: edition.title,
-          format: edition.format,
-          year: edition.pubYear
-        },
-        allEditions: allEditionsList,
-        matchedBranch: item.branchName,
-        copyStatus: (item.libraryStatus || 'Available') + (item.dueDate ? formattedDueDate : ''),
-        dueDate: item.dueDate || '-',
-        systemAvailable,
-        systemTotal,
-        systemHolds,
-        matchNote
+        status: 'IN STOCK',
+        copyDetail: copyLabel(best) + (n > 1 ? ` (${n} copies)` : ''),
+        due: isCheckedOut ? String(best.due || '').slice(0, 10) : '',
+        overdue: isCheckedOut && !!best.due && isOverdue(best.due, today),
+        best
       };
     }
-
-    if (bestUnavailableMatch) {
-      const { edition, item } = bestUnavailableMatch;
-      const formattedDueDate = item.dueDate ? item.dueDate : 'Not specified';
-      return {
-        title: book.title,
-        author: book.author,
-        status: 'AT BRANCH, NOT AVAILABLE',
-        matchedEdition: {
-          id: edition.id,
-          title: edition.title,
-          format: edition.format,
-          year: edition.pubYear
-        },
-        allEditions: allEditionsList,
-        matchedBranch: item.branchName,
-        copyStatus: item.libraryStatus || 'Unavailable',
-        dueDate: formattedDueDate,
-        systemAvailable,
-        systemTotal,
-        systemHolds,
-        matchNote
-      };
+    if (r.onOrder && r.onOrder.length) {
+      return { status: 'ON ORDER', copyDetail: 'On order', due: '', overdue: false, best: r.onOrder[0] };
     }
-
-    // No copy at target branch
-    return {
-      title: book.title,
-      author: book.author,
-      status: 'NOT AT BRANCH',
-      matchedEdition: {
-        id: primaryEdition.id,
-        title: primaryEdition.title,
-        format: primaryEdition.format,
-        year: primaryEdition.pubYear
-      },
-      allEditions: allEditionsList,
-      matchedBranch: '-',
-      copyStatus: 'None at selected branches',
-      dueDate: '-',
-      systemAvailable,
-      systemTotal,
-      systemHolds,
-      matchNote
-    };
+    if (r.notFound) return { status: 'CHECK MANUALLY', copyDetail: 'Not found in the catalog', due: '', overdue: false };
+    if (r.near && r.near.length) {
+      return { status: 'CHECK MANUALLY', copyDetail: 'Possible match at branch: ' + [...new Set(r.near)].slice(0, 2).join('; '), due: '', overdue: false };
+    }
+    if (r.partial) return { status: 'CHECK MANUALLY', copyDetail: r.partial, due: '', overdue: false };
+    if (r.httpNote) return { status: 'CHECK MANUALLY', copyDetail: r.httpNote, due: '', overdue: false };
+    return { status: 'NOT AT BRANCH', copyDetail: '', due: '', overdue: false };
   }
 
-  /**
-   * Helper function to execute fetch with exponential backoff on HTTP 429 / 5xx.
-   * Supports local cache (chrome.storage.local).
-   */
-  async function fetchWithRetryAndCache(url, options = {}, cacheStorage = null) {
-    const TTL_MS = 60 * 60 * 1000; // 1 hour
+  const warned = new Set();
+  const STATUSES = ['IN STOCK', 'ON ORDER', 'NOT AT BRANCH', 'CHECK MANUALLY', 'ERROR'];
 
-    // Check storage cache
-    if (cacheStorage && typeof cacheStorage.get === 'function') {
-      try {
-        const cached = await new Promise(resolve => cacheStorage.get(url, res => resolve(res[url])));
-        if (cached && cached.timestamp && (Date.now() - cached.timestamp < TTL_MS)) {
-          return cached.data;
-        }
-      } catch (e) {
-        console.warn('Cache read error:', e);
-      }
-    }
-
-    const maxRetries = 3;
-    const delays = [2000, 4000, 8000];
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await fetch(url, options);
-
-        if (response.ok) {
-          const data = await response.json();
-          // Write to cache
-          if (cacheStorage && typeof cacheStorage.set === 'function') {
-            try {
-              cacheStorage.set({ [url]: { timestamp: Date.now(), data } });
-            } catch (e) {
-              console.warn('Cache write error:', e);
-            }
-          }
-          return data;
-        }
-
-        // Retry on 429 or 5xx
-        if ((response.status === 429 || response.status >= 500) && attempt < maxRetries) {
-          await new Promise(res => setTimeout(res, delays[attempt]));
-          continue;
-        }
-
-        throw new Error(`HTTP ${response.status} ${response.statusText}`);
-      } catch (err) {
-        if (attempt >= maxRetries) {
-          throw err;
-        }
-        await new Promise(res => setTimeout(res, delays[attempt]));
-      }
-    }
-  }
-
-  // Exports
-  exports.CPL_LIB_ID = CPL_LIB_ID;
-  exports.BASE_URL = BASE_URL;
-  exports.ALL_CPL_BRANCHES = ALL_CPL_BRANCHES;
-  exports.normalizeBranch = normalizeBranch;
-  exports.isBranchMatch = isBranchMatch;
-  exports.formatAuthorForSearch = formatAuthorForSearch;
-  exports.cleanTitleForSearch = cleanTitleForSearch;
-  exports.buildSearchQueries = buildSearchQueries;
-  exports.parseSearchResponse = parseSearchResponse;
-  exports.parseAvailabilityResponse = parseAvailabilityResponse;
-  exports.evaluateBookAvailability = evaluateBookAvailability;
-  exports.fetchWithRetryAndCache = fetchWithRetryAndCache;
-
-})(typeof exports !== 'undefined' ? exports : (window.LibraryUtils = {}));
+  return {
+    BASE, IN_STOCK_STATUSES, ON_ORDER_STATUSES, STATUSES,
+    classifyStatus, cleanTitle, normalizeTitle, titleRelation, authorForQuery, titleForQuery,
+    buildQuery, searchUrl, availabilityUrl, locationsUrl, recordUrl,
+    yearOf, parseSearch, parseAvailability, parseLocations, isOverdue, decide, copyLabel
+  };
+});

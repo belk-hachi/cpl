@@ -1,0 +1,59 @@
+{
+ "catalogSearch": {
+  "pagination": {
+   "count": 106,
+   "pages": 5,
+   "page": 1
+  },
+  "results": [
+   {
+    "representative": "S1",
+    "manifestations": [
+     "S1"
+    ]
+   },
+   {
+    "representative": "S2",
+    "manifestations": [
+     "S2"
+    ]
+   }
+  ]
+ },
+ "entities": {
+  "bibs": {
+   "S1": {
+    "briefInfo": {
+     "title": "Pride and Prejudice",
+     "format": "PAPERBACK",
+     "authors": [
+      "Austen, Jane"
+     ],
+     "publicationDate": "2010"
+    },
+    "availability": {
+     "availableCopies": 4,
+     "totalCopies": 32,
+     "heldCopies": 0,
+     "onOrderCopies": 1
+    }
+   },
+   "S2": {
+    "briefInfo": {
+     "title": "Pride and Prejudice",
+     "format": "BK",
+     "authors": [
+      "Austen, Jane"
+     ],
+     "publicationDate": "2001"
+    },
+    "availability": {
+     "availableCopies": 5,
+     "totalCopies": 13,
+     "heldCopies": 0,
+     "onOrderCopies": 0
+    }
+   }
+  }
+ }
+}

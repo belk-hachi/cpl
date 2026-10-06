@@ -1,156 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chicago Public Library Availability Checker</title>
-  <link rel="stylesheet" href="app.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock check</title>
+  <link rel="stylesheet" href="app.css">
 </head>
 <body>
-  <div class="container">
-    <!-- Header -->
+  <div class="topbar"><div>Stock check<span>Branch ordering tool</span></div></div>
+  <main class="wrap">
     <header>
-      <h1>
-        📚 Chicago Public Library Availability Checker
-      </h1>
-      <div class="badge-privacy">
-        🔒 Requests go directly from your browser to CPL. Spreadsheet data never leaves your computer.
-      </div>
+      <h1>Is it already on our shelves?</h1>
+      <p class="sub">Does the branch already own these books? Upload a spreadsheet to find out before you order.</p>
     </header>
 
-    <!-- 1. Big Spreadsheet File Upload Zone -->
-    <div class="card file-upload-card">
-      <div id="dropZone" class="drop-zone-large">
-        <div class="drop-zone-icon">📄</div>
-        <div class="drop-zone-main-text">
-          Drag & drop your Excel (<strong>.xlsx</strong>) or <strong>.csv</strong> file here
-        </div>
-        <div class="drop-zone-sub-text">or <span class="browse-link">Browse files</span> from your computer</div>
-        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display: none;" />
-        <div id="fileInfo" class="file-info-badge" style="display: none;"></div>
+    <section id="stepFile">
+      <label id="dropZone" class="drop" tabindex="0">
+        <span>Drop a spreadsheet or click to choose</span>
+        <small id="fileName">.xlsx or .csv</small>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+      </label>
+    </section>
+
+    <section id="stepSetup" class="panel" hidden>
+      <div class="fields">
+        <label>Title column <select id="titleCol"></select></label>
+        <label>Author column <select id="authorCol"></select></label>
+        <label id="sheetWrap" hidden>Sheet <select id="sheetSel"></select></label>
+        <label>Branch <select id="branchSel"></select></label>
       </div>
-    </div>
-
-    <!-- 2. Bottom Configuration Panel (Target Library + Columns + Start Button), revealed after file selected -->
-    <div class="card config-panel" id="configBottomPanel" style="display: none;">
-      <div class="config-grid">
-        <!-- Target Library Branch Select -->
-        <div class="config-col branch-col">
-          <label class="panel-label" for="targetBranchSelect">Target Library Branch</label>
-          <div class="branch-input-wrapper">
-            <select id="targetBranchSelect">
-              <option value="Little Italy">Little Italy</option>
-              <!-- Populated dynamically from https://gateway.bibliocommons.com/v2/libraries/chipublib/locations?limit=200&locale=en-US -->
-            </select>
-          </div>
-        </div>
-
-        <!-- Sheet Selector (if multiple sheets) -->
-        <div class="config-col sheet-col" id="sheetSelectGroup" style="display: none;">
-          <label class="panel-label" for="sheetSelect">Worksheet</label>
-          <select id="sheetSelect"></select>
-        </div>
-
-        <!-- Book Title Column -->
-        <div class="config-col title-col">
-          <label class="panel-label" for="titleColSelect">Book Title Column</label>
-          <select id="titleColSelect"></select>
-        </div>
-
-        <!-- Author Column -->
-        <div class="config-col author-col">
-          <label class="panel-label" for="authorColSelect">Author Column</label>
-          <select id="authorColSelect"></select>
-        </div>
-
-        <!-- Request Pause / Delay Time -->
-        <div class="config-col delay-col">
-          <label class="panel-label" for="requestDelayInput">Request Pause (ms)</label>
-          <input type="number" id="requestDelayInput" value="500" min="0" max="10000" step="50" placeholder="e.g. 500" />
-        </div>
-
-        <!-- Actions -->
-        <div class="config-col action-col">
-          <label class="panel-label">&nbsp;</label>
-          <div class="action-buttons-row">
-            <button type="button" id="btnStart" class="btn btn-primary" disabled>Start Search</button>
-            <button type="button" id="btnCancel" class="btn btn-danger" disabled>Cancel</button>
-            <button type="button" id="btnClearCache" class="btn btn-sm" title="Clear cached responses">Clear Cache</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Expandable Preview Drawer (First 5 Rows) -->
-      <details id="previewDrawer" class="preview-drawer" style="display: none;">
-        <summary>View Spreadsheet Preview (First 5 Rows)</summary>
-        <div class="preview-table-container">
-          <table class="preview-table" id="previewTable">
-            <thead></thead>
-            <tbody></tbody>
-          </table>
-        </div>
+      <details class="preview"><summary>Preview first 5 rows</summary>
+        <div class="scroll"><table id="previewTable"></table></div>
       </details>
-
-      <!-- Integrated Progress Bar -->
-      <div id="progressContainer" class="progress-container" style="display: none;">
-        <div class="progress-status">
-          <span id="progressText">Ready</span>
-          <span id="progressPercent">0%</span>
-        </div>
-        <div class="progress-bar-bg">
-          <div id="progressBarFill" class="progress-bar-fill"></div>
-        </div>
+      <div class="actions">
+        <button id="btnStart" class="primary" type="button">Check</button>
+        <button id="btnCancel" class="outlined" type="button" hidden>Cancel</button>
+        <span id="progressText" class="muted"></span>
       </div>
-    </div>
+    </section>
 
-    <!-- Results Section -->
-    <div class="card" id="resultsCard" style="display: none;">
-      <div class="results-header">
-        <div class="results-toolbar">
-          <h2>Results (<span id="totalResultsCount">0</span>)</h2>
-          <div style="display: flex; gap: 12px; align-items: center;">
-            <input type="text" id="tableSearchInput" class="search-box" placeholder="Filter by title, author, branch..." />
-            <button type="button" id="btnDownloadCsv" class="btn btn-primary">Download Results (CSV)</button>
-          </div>
-        </div>
+    <div id="banner" class="banner" hidden role="alert"></div>
+    <div id="progress" class="progress" hidden><div id="progressFill"></div></div>
 
-        <!-- Filter tabs -->
-        <div class="filter-tabs" id="filterTabs">
-          <button class="tab-btn active" data-filter="ALL">All (<span id="countAll">0</span>)</button>
-          <button class="tab-btn" data-filter="AVAILABLE">Available / Owned (<span id="countAvailable">0</span>)</button>
-          <button class="tab-btn" data-filter="NOT AT BRANCH">Not At Branch (<span id="countNotAtBranch">0</span>)</button>
-          <button class="tab-btn" data-filter="NOT FOUND">Not Found (<span id="countNotFound">0</span>)</button>
-          <button class="tab-btn" data-filter="ERROR">Errors (<span id="countError">0</span>)</button>
-        </div>
+    <section id="stepResults" hidden>
+      <div class="toolbar">
+        <div id="pills" class="pills"></div>
+        <input id="search" type="search" placeholder="Search title or author" aria-label="Search results">
+        <button id="btnRetry" class="outlined" type="button" hidden>Retry failed</button>
+        <button id="btnCsv" class="outlined" type="button">Export CSV</button>
       </div>
-
-      <!-- Results Table -->
-      <div class="results-table-container">
-        <table class="results-table" id="resultsTable">
-          <thead>
-            <tr>
-              <th data-sort="title">Title ▲▼</th>
-              <th data-sort="author">Author ▲▼</th>
-              <th data-sort="status">Status ▲▼</th>
-              <th data-sort="matchedEdition">Matched Editions ▲▼</th>
-              <th data-sort="matchedBranch">Branch ▲▼</th>
-              <th data-sort="copyStatus">Copy Status ▲▼</th>
-              <th data-sort="dueDate">Due Date ▲▼</th>
-              <th data-sort="systemAvailable">System Copies (Avail/Total/Holds) ▲▼</th>
-            </tr>
-          </thead>
-          <tbody id="resultsTbody">
-            <!-- Populated by JS -->
-          </tbody>
+      <div class="scroll tablewrap">
+        <table id="results">
+          <thead><tr>
+            <th data-sort="rowIndex">Row</th><th data-sort="title">Title</th><th data-sort="author">Author</th>
+            <th data-sort="status">Status</th><th data-sort="copyDetail">Copy detail</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
         </table>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <!-- External libraries and modules -->
+    <footer>
+      <p>Requests go from your browser directly to the library. Nothing is uploaded elsewhere.</p>
+      <p>Version <span id="ver"></span> · <a href="#" id="clearCache">Clear cache</a></p>
+    </footer>
+  </main>
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="sheet.js"></script>
   <script src="library.js"></script>
+  <script src="api.js"></script>
+  <script src="engine.js"></script>
+  <script src="export.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

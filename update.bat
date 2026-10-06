@@ -24,6 +24,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  Get-ChildItem -Path $source.FullName -Recurse | ForEach-Object {" ^
   "    $relative = $_.FullName.Substring($source.FullName.Length).TrimStart('\', '/');" ^
   "    $target = Join-Path (Get-Location).Path $relative;" ^
+  "    if ($relative -match '^(update\.bat|\.gitignore|\.git|tests)($|[\\/])') { return; }" ^
   "    if ($_.PSIsContainer) {" ^
   "      if (-not (Test-Path -LiteralPath $target)) { [System.IO.Directory]::CreateDirectory($target) | Out-Null; }" ^
   "    } else {" ^
@@ -59,7 +60,6 @@ echo.
 echo FINAL STEP:
 echo 1. Open your browser extensions page:
 echo    Chrome: chrome://extensions
-echo    Edge:   edge://extensions
-echo 2. Click the RELOAD button on the CPL Extension card.
+echo 2. Click the RELOAD button on the CPL Stock Check card.
 echo.
 pause

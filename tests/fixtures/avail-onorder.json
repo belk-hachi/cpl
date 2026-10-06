@@ -1,0 +1,17 @@
+{
+ "entities": {
+  "bibItems": {
+   "it0": {
+    "branchName": "Little Italy",
+    "branch": {
+     "code": "62"
+    },
+    "callNumber": "X",
+    "availability": {
+     "libraryStatus": "On Order",
+     "statusType": "ON_ORDER"
+    }
+   }
+  }
+ }
+}

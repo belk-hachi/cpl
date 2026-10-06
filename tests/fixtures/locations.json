@@ -1,0 +1,28 @@
+{
+ "locations": {
+  "results": [
+   "62",
+   "3"
+  ]
+ },
+ "entities": {
+  "locations": {
+   "62": {
+    "id": "62",
+    "name": "Little Italy",
+    "isHidden": false,
+    "sortedHours": []
+   },
+   "3": {
+    "id": "3",
+    "name": "Albany Park",
+    "isHidden": false
+   },
+   "99": {
+    "id": "99",
+    "name": "Hidden One",
+    "isHidden": true
+   }
+  }
+ }
+}
