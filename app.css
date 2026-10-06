@@ -189,6 +189,11 @@ header h1 {
   flex: 1.4 1 220px;
 }
 
+.delay-col {
+  flex: 0.8 1 140px;
+  min-width: 130px;
+}
+
 .action-col {
   flex: 0 0 auto;
 }
@@ -238,19 +243,20 @@ header h1 {
 }
 
 /* Form controls */
-select, input[type="text"] {
+select, input[type="text"], input[type="number"] {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   color: var(--text-main);
   padding: 9px 12px;
   border-radius: var(--radius-xs);
   font-size: 0.875rem;
+  font-family: inherit;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
   width: 100%;
 }
 
-select:focus, input[type="text"]:focus {
+select:focus, input[type="text"]:focus, input[type="number"]:focus {
   border-color: var(--google-blue);
   box-shadow: 0 0 0 1px var(--google-blue);
 }

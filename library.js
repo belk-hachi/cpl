@@ -156,7 +156,7 @@
       });
     }
 
-    // 3. If title had a subtitle, try main title (before colon)
+    // 3. If title had a subtitle, try main title (before colon) + author
     if (titleObj.hasSubtitle && titleObj.mainTitle && authorObj.formatted) {
       queries.push({
         query: `(contributor:(${authorObj.formatted}) AND title:(${titleObj.mainTitle}) ) ${formatConstraint}`,
@@ -164,20 +164,21 @@
       });
     }
 
-    // 4. Fallback: Title only
-    if (titleObj.titleClean) {
-      queries.push({
-        query: `title:(${titleObj.titleClean}) ${formatConstraint}`,
-        note: 'Matched by title only'
-      });
-    }
+    // 4. Fallback: Title only (ONLY if no author was provided in spreadsheet)
+    if (!author || !author.trim()) {
+      if (titleObj.titleClean) {
+        queries.push({
+          query: `title:(${titleObj.titleClean}) ${formatConstraint}`,
+          note: 'Matched by title only'
+        });
+      }
 
-    // 5. Ultimate fallback: Main title only if subtitle existed
-    if (titleObj.hasSubtitle && titleObj.mainTitle) {
-      queries.push({
-        query: `title:(${titleObj.mainTitle}) ${formatConstraint}`,
-        note: 'Matched by main title only'
-      });
+      if (titleObj.hasSubtitle && titleObj.mainTitle) {
+        queries.push({
+          query: `title:(${titleObj.mainTitle}) ${formatConstraint}`,
+          note: 'Matched by main title only'
+        });
+      }
     }
 
     return queries;

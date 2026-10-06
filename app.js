@@ -33,6 +33,7 @@
   const previewTable = document.getElementById('previewTable');
 
   const targetBranchSelect = document.getElementById('targetBranchSelect');
+  const requestDelayInput = document.getElementById('requestDelayInput');
 
   const btnStart = document.getElementById('btnStart');
   const btnCancel = document.getElementById('btnCancel');
@@ -119,10 +120,13 @@
   // --- Storage & Settings ---
   function loadSavedSettings() {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get(['targetBranch'], (res) => {
+      chrome.storage.local.get(['targetBranch', 'requestDelay'], (res) => {
         if (res.targetBranch) {
           targetBranch = res.targetBranch;
           if (targetBranchSelect) targetBranchSelect.value = targetBranch;
+        }
+        if (res.requestDelay !== undefined && requestDelayInput) {
+          requestDelayInput.value = res.requestDelay;
         }
       });
     }
@@ -132,8 +136,9 @@
     if (targetBranchSelect) {
       targetBranch = targetBranchSelect.value || 'Little Italy';
     }
+    const delayVal = requestDelayInput ? parseInt(requestDelayInput.value, 10) : 500;
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.set({ targetBranch });
+      chrome.storage.local.set({ targetBranch, requestDelay: isNaN(delayVal) ? 500 : delayVal });
     }
   }
 
@@ -173,12 +178,16 @@
     titleColSelect.addEventListener('change', onColumnSelectChange);
     authorColSelect.addEventListener('change', onColumnSelectChange);
 
-    // Target Branch Select
+    // Target Branch Select & Pause Input
     if (targetBranchSelect) {
       targetBranchSelect.addEventListener('change', () => {
         saveBranchSettings();
         updateStartButtonState();
       });
+    }
+    if (requestDelayInput) {
+      requestDelayInput.addEventListener('change', saveBranchSettings);
+      requestDelayInput.addEventListener('input', saveBranchSettings);
     }
 
     // Execution Buttons
@@ -426,16 +435,25 @@
         if (editions.length === 0) {
           resultObj = LibraryUtils.evaluateBookAvailability(book, [], new Map(), currentTargetBranches, 'No search results found');
         } else {
-          // Fetch availability for each matched edition (up to 10)
+          // Fetch availability for top matched editions (max 2 to optimize requests)
           const availabilityMap = new Map();
+          const maxAvailFetch = Math.min(editions.length, 2);
 
-          for (const edition of editions) {
+          for (let eIdx = 0; eIdx < maxAvailFetch; eIdx++) {
             if (isCancelled) break;
+            const edition = editions[eIdx];
             const availUrl = `${LibraryUtils.BASE_URL}/bibs/${edition.id}/availability?locale=en-US`;
             try {
               const availData = await LibraryUtils.fetchWithRetryAndCache(availUrl, {}, storageCache);
               const parsedAvail = LibraryUtils.parseAvailabilityResponse(availData, edition.id);
               availabilityMap.set(edition.id, parsedAvail);
+
+              // Stop early if we found a copy at the target branch
+              const hasTargetCopy = parsedAvail.items && parsedAvail.items.some(item =>
+                currentTargetBranches.some(tb => LibraryUtils.isBranchMatch(item.branchName, tb))
+              );
+              if (hasTargetCopy) break;
+
             } catch (availErr) {
               console.warn(`Availability fetch failed for edition ${edition.id}:`, availErr);
             }
@@ -463,10 +481,13 @@
       updateCounts();
       renderResultsTable();
 
-      // Request etiquette: 400ms to 600ms delay between requests
+      // Configurable pause between requests (default: 500ms)
       if (i < parsedBooks.length - 1 && !isCancelled) {
-        const delay = 400 + Math.random() * 200;
-        await new Promise(r => setTimeout(r, delay));
+        const userDelayMs = requestDelayInput ? parseInt(requestDelayInput.value, 10) : 500;
+        const pauseMs = isNaN(userDelayMs) || userDelayMs < 0 ? 500 : userDelayMs;
+        if (pauseMs > 0) {
+          await new Promise(r => setTimeout(r, pauseMs));
+        }
       }
     }
 
