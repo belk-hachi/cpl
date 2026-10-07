@@ -124,8 +124,9 @@
   const recordUrl = id => CATALOG + id;
   /** Link to the CPL website's own search, for rows a person has to check by hand. */
   function catalogSearchUrl(title, author) {
-    const q = [titleForQuery(title), authorForQuery(author)].filter(Boolean).join(' ');
-    return 'https://chipublib.bibliocommons.com/v2/search?searchType=smart&query=' + encodeURIComponent(q);
+    // Same URL shape the CPL website uses itself: keyword search, filtered to books and paperbacks.
+    const q = [titleForQuery(title), authorForQuery(author).replace(/,/g, '')].filter(Boolean).join(' ');
+    return 'https://chipublib.bibliocommons.com/v2/search?searchType=keyword&query=' + encodeURIComponent(q) + '&f_FORMAT=' + encodeURIComponent('BK|PAPERBACK');
   }
 
   // ---------- parsing ----------

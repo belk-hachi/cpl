@@ -182,7 +182,7 @@ test('CPL search link uses cleaned title and author, only on rows to check by ha
   const u = Lib.catalogSearchUrl('Living a Jewish Life, Revised and Updated: Traditions', 'Diamant, Anita');
   assert.ok(u.startsWith('https://chipublib.bibliocommons.com/v2/search?'));
   assert.ok(!/Revised/i.test(decodeURIComponent(u)));
-  assert.ok(/Diamant/.test(decodeURIComponent(u)));
+  assert.ok(/Diamant/.test(decodeURIComponent(u))); assert.ok(u.endsWith('&f_FORMAT=BK%7CPAPERBACK')); assert.ok(/searchType=keyword/.test(u));
   const csv = Exp.toCsv([{ rowIndex: 2, title: 'A', author: 'B', result: { status: 'CHECK MANUALLY' } }, { rowIndex: 3, title: 'A', author: 'B', result: { status: 'IN STOCK' } }], 'X').split('\r\n');
   assert.ok(csv[0].endsWith('CPL search link')); assert.ok(/bibliocommons\.com\/v2\/search/.test(csv[1])); assert.ok(!/bibliocommons/.test(csv[2]));
 });
