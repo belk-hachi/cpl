@@ -14,6 +14,12 @@
       <p class="sub">Does the branch already own these books? Upload a spreadsheet to find out before you order.</p>
     </header>
 
+    <div id="resumeBox" class="panel" hidden>
+      <span id="resumeText"></span>
+      <div class="actions"><button id="btnResumeSaved" class="primary" type="button">Open it</button>
+      <button id="btnDiscardSaved" class="outlined" type="button">Discard</button></div>
+    </div>
+
     <section id="stepFile">
       <label id="dropZone" class="drop" tabindex="0">
         <span>Drop a spreadsheet or click to choose</span>
@@ -40,7 +46,7 @@
       </details>
       <div class="actions">
         <button id="btnStart" class="primary" type="button">Check</button>
-        <button id="btnCancel" class="outlined" type="button" hidden>Cancel</button>
+        <button id="btnCancel" class="outlined" type="button" hidden>Pause</button>
         <span id="progressText" class="muted"></span>
       </div>
     </section>

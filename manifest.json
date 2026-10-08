@@ -10,7 +10,8 @@
     "service_worker": "background.js"
   },
   "permissions": [
-    "storage"
+    "storage",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://gateway.bibliocommons.com/*"

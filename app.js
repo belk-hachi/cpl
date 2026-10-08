@@ -15,7 +15,7 @@
     set(k, v) { return chrome.storage.local.set({ [k]: v }); }
   };
 
-  const state = { workbook: null, rows: [], books: [], results: [], branches: [], running: false, cancel: false,
+  const state = { workbook: null, rows: [], books: [], results: [], branches: [], running: false, cancel: false, fileName: '',
     filter: 'ALL', query: '', sort: { key: 'rowIndex', dir: 1 }, open: new Set(), settings: {} };
 
   let api;
@@ -32,10 +32,55 @@
       delayMs: 1000
     });
     await api.init();
-    const pause = [500, 1000, 2000, 3000].includes(Number(state.settings.pauseMs)) ? Number(state.settings.pauseMs) : 1000;
-    $('pauseSel').value = String(pause); api.setDelay(pause);
+    const pauseMs = [500, 1000, 2000, 3000].includes(Number(state.settings.pauseMs)) ? Number(state.settings.pauseMs) : 1000;
+    $('pauseSel').value = String(pauseMs); api.setDelay(pauseMs);
     await loadBranches();
     bind();
+    await offerSavedSession();
+  }
+
+  // ---------- saved session (pause / resume across closing the tab) ----------
+  let lastSave = 0;
+  function saveSession() {
+    lastSave = Date.now();
+    return Promise.resolve(store.set('session', { fileName: state.fileName, books: state.books, results: state.results, branch: state.branch, savedAt: lastSave }))
+      .catch(e => showBanner('Could not save progress (' + e.message + '). Export the CSV before closing this page.'));
+  }
+  const hasProgress = () => state.results.some(Boolean);
+  // Columns, sheet and branch must not change once results exist, or old and new rows would not match.
+  function lockInputs(locked) {
+    for (const id of ['titleCol', 'authorCol', 'sheetSel', 'branchSel']) $(id).disabled = locked;
+  }
+  const remaining = () => state.books.map((b, i) => (state.results[i] ? -1 : i)).filter(i => i >= 0);
+
+  async function offerSavedSession() {
+    const s = await store.get('session');
+    if (!s || !s.books || !s.results || !s.results.some(Boolean)) return;
+    state.saved = s;
+    const done = s.results.filter(Boolean).length;
+    const box = $('resumeBox');
+    $('resumeText').textContent = `Unfinished check of "${s.fileName || 'a spreadsheet'}": ${done} of ${s.books.length} books done (${new Date(s.savedAt).toLocaleString()}).`;
+    box.hidden = false;
+    $('btnResumeSaved').onclick = () => {
+      box.hidden = true; state.saved = null;
+      state.fileName = s.fileName; state.books = s.books; state.results = s.results; state.branch = s.branch;
+      if (s.branch && state.branches.some(b => b.code === s.branch.code)) $('branchSel').value = s.branch.code;
+      $('fileName').textContent = s.fileName || '';
+      $('stepSetup').hidden = false; $('stepResults').hidden = false; $('progress').hidden = false;
+      $('titleCol').replaceChildren(); $('authorCol').replaceChildren();
+      showStartButton();
+      renderTable();
+    };
+    $('btnDiscardSaved').onclick = async () => { box.hidden = true; state.saved = null; await store.set('session', null); };
+  }
+
+  function showStartButton() {
+    lockInputs(hasProgress());
+    const left = remaining().length, any = state.results.some(Boolean);
+    $('btnStart').disabled = !state.books.length || (any && !left);
+    $('btnStart').textContent = any && left ? 'Resume' : 'Check';
+    $('progressText').textContent = any ? `${state.books.length - left} of ${state.books.length} done` + (left ? ' (paused)' : '') : `${state.books.length} books`;
+    $('progressFill').style.width = (state.books.length ? (state.books.length - left) / state.books.length * 100 : 0) + '%';
   }
 
   async function loadBranches() {
@@ -65,8 +110,8 @@
     $('authorCol').addEventListener('change', refreshBooks);
     $('pauseSel').addEventListener('change', () => { const ms = Number($('pauseSel').value); api.setDelay(ms); state.settings.pauseMs = ms; store.set('settings', state.settings); });
     $('branchSel').addEventListener('change', () => { state.settings.branchCode = $('branchSel').value; store.set('settings', state.settings); });
-    $('btnStart').addEventListener('click', () => run(state.books.map((b, i) => i)));
-    $('btnCancel').addEventListener('click', () => { state.cancel = true; $('btnCancel').disabled = true; });
+    $('btnStart').addEventListener('click', () => (state.results.some(Boolean) && remaining().length ? run(remaining(), true) : run(state.books.map((b, i) => i))));
+    $('btnCancel').addEventListener('click', () => { state.cancel = true; $('btnCancel').disabled = true; $('btnCancel').textContent = 'Pausing...'; });
     $('btnRetry').addEventListener('click', () => run(state.results.map((r, i) => (r && r.status === 'ERROR' ? i : -1)).filter(i => i >= 0), true));
     $('btnCsv').addEventListener('click', downloadCsv);
     $('search').addEventListener('input', e => { state.query = e.target.value.toLowerCase(); renderTable(); });
@@ -80,9 +125,12 @@
 
   // ---------- file ----------
   async function loadFile(file) {
+    $('fileInput').value = '';
+    if (hasProgress() && !confirm(`This will discard the ${state.results.filter(Boolean).length} results on screen (export the CSV first if you need them). Continue?`)) return;
     try {
       const buf = await file.arrayBuffer();
       state.workbook = SheetUtils.readWorkbook(new Uint8Array(buf));
+      state.fileName = file.name; state.results = [];
       $('fileName').textContent = file.name;
       const names = state.workbook.SheetNames;
       $('sheetWrap').hidden = names.length < 2;
@@ -112,18 +160,21 @@
 
   function refreshBooks() {
     state.books = SheetUtils.extractBookRows(state.rows, +$('titleCol').value, +$('authorCol').value).filter(b => b.title);
-    $('btnStart').disabled = !state.books.length;
-    $('progressText').textContent = `${state.books.length} books`;
+    state.results = [];
+    showStartButton();
   }
 
   // ---------- run ----------
   async function run(indexes, isRetry) {
     if (state.running || !indexes.length) return;
+    if (!isRetry && state.saved && !confirm(`This will replace the unfinished check of "${state.saved.fileName}" (${state.saved.results.filter(Boolean).length} of ${state.saved.books.length} done). Continue?`)) return;
+    if (!isRetry) state.saved = null;
     const code = $('branchSel').value;
-    const branch = { code, name: state.branches.find(b => b.code === code).name };
+    const branch = hasProgress() && state.branch ? state.branch : { code, name: state.branches.find(b => b.code === code).name };
     state.running = true; state.cancel = false; state.branch = branch;
     if (!isRetry) { state.results = new Array(state.books.length).fill(null); state.open.clear(); }
-    $('btnStart').hidden = true; $('btnCancel').hidden = false; $('btnCancel').disabled = false;
+    $('btnStart').hidden = true; $('btnCancel').hidden = false; $('btnCancel').disabled = false; $('btnCancel').textContent = 'Pause';
+    $('resumeBox').hidden = true; lockInputs(true);
     $('stepResults').hidden = false; $('progress').hidden = false; showBanner('');
     renderTable();
     let done = 0;
@@ -139,11 +190,13 @@
       }
       done++;
       renderTable();
+      if (Date.now() - lastSave > 10000) saveSession();
     }
-    $('progressText').textContent = `${done} of ${indexes.length}` + (state.cancel ? ' (cancelled)' : '') + ` · ${api.stats.requests} requests sent, ${api.stats.cacheHits} answered from cache`;
-    $('progressFill').style.width = (done / indexes.length * 100) + '%';
     state.running = false;
+    await saveSession();
     $('btnStart').hidden = false; $('btnCancel').hidden = true;
+    showStartButton();
+    $('progressText').textContent += ` · ${api.stats.requests} requests sent, ${api.stats.cacheHits} answered from cache`;
     renderTable();
   }
 
